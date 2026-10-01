@@ -1,0 +1,280 @@
+DROP VIEW IF EXISTS Student_Faculty_Course_V;
+DROP VIEW IF EXISTS Teaches_V;
+DROP VIEW IF EXISTS Young_Rich_V;
+DROP VIEW IF EXISTS Nontraditional_Students_V;
+
+DROP TABLE IF EXISTS Attends;
+DROP TABLE IF EXISTS Section;
+DROP TABLE IF EXISTS Course;
+DROP TABLE IF EXISTS Student;
+DROP TABLE IF EXISTS Faculty;
+
+CREATE TABLE Faculty (
+    fss_num VARCHAR(20) NOT NULL,
+    name VARCHAR(50) NOT NULL,
+    address VARCHAR(100),
+    age INT,
+    salary DECIMAL(10, 2),
+    CONSTRAINT fss_PK PRIMARY KEY (fss_num)
+);
+
+CREATE TABLE Course (
+    c_num INT NOT NULL,
+    c_desc VARCHAR(100) NOT NULL,
+    credits INT NOT NULL,
+    size_limit INT,
+    CONSTRAINT c_num_PK PRIMARY KEY (c_num)
+);
+
+CREATE TABLE Student (
+    sss_num VARCHAR(20) NOT NULL,
+    name VARCHAR(50) NOT NULL,
+    address VARCHAR(100),
+    age INT NOT NULL,
+    CONSTRAINT sss_num_PK PRIMARY KEY (sss_num)
+);
+
+CREATE TABLE Section (
+    c_num INT NOT NULL,
+    sec_num INT NOT NULL,
+    fss_num VARCHAR(20),
+    CONSTRAINT c_num_sec_num_PK PRIMARY KEY (c_num, sec_num),
+    CONSTRAINT c_num_FK_section FOREIGN KEY (c_num) REFERENCES Course(c_num) ON DELETE CASCADE,
+    CONSTRAINT fss_num_FK_section FOREIGN KEY (fss_num) REFERENCES Faculty(fss_num) ON DELETE SET NULL
+);
+
+CREATE TABLE Attends (
+    sss_num VARCHAR(20) NOT NULL,
+    c_num INT NOT NULL,
+    sec_num INT NOT NULL,
+    CONSTRAINT sss_num_c_num_PK PRIMARY KEY (sss_num, c_num, sec_num),
+    CONSTRAINT sss_num_FK FOREIGN KEY (sss_num) REFERENCES Student(sss_num) ON DELETE CASCADE,
+    CONSTRAINT c_num_sec_FK FOREIGN KEY (c_num, sec_num) REFERENCES Section(c_num, sec_num) ON DELETE CASCADE
+);-- Performance Indexes
+CREATE INDEX student_name_idx ON Student(name);
+CREATE INDEX faculty_name_idx ON Faculty(name);
+
+
+-- ------------------------------------------------------------
+-- 2. SAMPLE DATA INSERTION (FOR TESTING & DEMO)
+-- ------------------------------------------------------------
+
+INSERT INTO Faculty (fss_num, name, address, age, salary) VALUES
+('F101', 'Mohammadi', '123 College St', 34, 62000.00),
+('F102', 'Smith', '456 University Ave', 42, 75000.00),
+('F103', 'Johnson', '789 Campus Rd', 29, 48000.00),
+('F104', 'Williams', '321 Oak Ln', 55, 90000.00);
+
+INSERT INTO Course (c_num, c_desc, credits, size_limit) VALUES
+(101, 'Data Structures & Algorithms', 4, 30),
+(102, 'Data Analysis with SQL', 3, 25),
+(103, 'Applied Statistics', 3, 20),
+(104, 'Advanced Database Systems', 4, 15);
+
+INSERT INTO Student (sss_num, name, address, age) VALUES
+('S1001', 'Alice Vance', '10 Elm St', 22),
+('S1002', 'Bob Miller', '12 Maple Ave', 27),
+('S1003', 'Charlie Davis', '15 Pine Rd', 21),
+('S1004', 'Diana Prince', '20 Cedar St', 30);
+
+INSERT INTO Section (c_num, sec_num, fss_num) VALUES
+(101, 1, 'F101'),
+(101, 2, 'F102'),
+(102, 1, 'F101'),
+(103, 1, 'F103'),
+(104, 1, 'F104');
+
+INSERT INTO Attends (sss_num, c_num, sec_num) VALUES
+('S1001', 101, 1),
+('S1001', 102, 1),
+('S1001', 103, 1),
+('S1002', 101, 1),
+('S1002', 102, 1),
+('S1003', 103, 1),
+('S1004', 101, 2),
+('S1004', 104, 1);
+
+
+-- ------------------------------------------------------------
+-- 3. ANALYTICAL VIEWS (EXPLICIT JOIN REFACTOR)
+-- ------------------------------------------------------------
+
+-- Filter view for non-traditional students
+CREATE VIEW Nontraditional_Students_V AS 
+SELECT sss_num, name, address, age
+FROM Student
+WHERE age > 25;
+
+-- Filter view for junior high-earning faculty
+CREATE VIEW Young_Rich_V AS 
+SELECT fss_num, name, age, salary
+FROM Faculty
+WHERE age < 35 AND salary > 50000;
+
+-- Relational view mapping faculty to assigned course descriptions
+CREATE VIEW Teaches_V AS 
+SELECT 
+    f.name AS faculty_name, 
+    c.c_desc AS course_description,
+    sec.sec_num AS section_number
+FROM Faculty f
+JOIN Section sec ON f.fss_num = sec.fss_num
+JOIN Course c ON sec.c_num = c.c_num;
+
+-- Relational view mapping students, their sections, and instructors
+CREATE VIEW Student_Faculty_Course_V AS
+SELECT 
+    s.name AS student_name,
+    f.name AS faculty_name,
+    c.c_desc AS course_title,
+    sec.sec_num AS section_number
+FROM Student s
+JOIN Attends a ON s.sss_num = a.sss_num
+JOIN Section sec ON a.c_num = sec.c_num AND a.sec_num = sec.sec_num
+JOIN Course c ON sec.c_num = c.c_num
+JOIN Faculty f ON sec.fss_num = f.fss_num;
+
+
+-- ------------------------------------------------------------
+-- 4. BASIC QUERY SUITE & DATA MANIPULATION
+-- -------------------------------------------------------------- Sorted Directory Queries
+SELECT * FROM Student ORDER BY name;
+SELECT * FROM Faculty ORDER BY name;
+SELECT * FROM Course ORDER BY c_desc;
+
+-- View Inspections
+SELECT * FROM Young_Rich_V;
+SELECT * FROM Nontraditional_Students_V;
+SELECT * FROM Student_Faculty_Course_V;
+
+-- Faculty Salary Filtering (Subquery Exclusion)
+SELECT name, age, salary
+FROM Faculty
+WHERE fss_num NOT IN (SELECT fss_num FROM Young_Rich_V);
+
+-- Identify Courses Taught by Multiple Faculty Across Different Sections (Self-Join)
+SELECT 
+    f1.name AS faculty_1,
+    f2.name AS faculty_2,
+    s1.c_num AS course_number
+FROM Section s1
+JOIN Section s2 
+    ON s1.c_num = s2.c_num 
+   AND s1.sec_num <> s2.sec_num 
+   AND s1.fss_num <> s2.fss_num 
+   AND s1.sec_num < s2.sec_num 
+JOIN Faculty f1 ON f1.fss_num = s1.fss_num
+JOIN Faculty f2 ON f2.fss_num = s2.fss_num;
+
+-- Targeted Update: Increment course credits for specific faculty
+UPDATE Course
+SET credits = credits + 1
+WHERE c_num IN (
+    SELECT s.c_num
+    FROM Section s
+    JOIN Faculty f ON s.fss_num = f.fss_num
+    WHERE f.name = 'Mohammadi'
+);
+
+-- Cleanup: Remove courses without active sections assigned
+DELETE FROM Course
+WHERE c_num NOT IN (
+    SELECT c_num FROM Section
+);
+
+
+-- ------------------------------------------------------------
+-- 5. ADVANCED PRODUCTION & BUSINESS INTELLIGENCE ANALYTICS
+-- ------------------------------------------------------------
+
+-- Query A: Window Function - Dense Rank Student Credit Hours
+WITH StudentCredits AS (
+    SELECT 
+        s.sss_num,
+        s.name AS student_name,
+        s.age,
+        COALESCE(SUM(c.credits), 0) AS total_credits
+    FROM Student s
+    LEFT JOIN Attends a ON s.sss_num = a.sss_num
+    LEFT JOIN Course c ON a.c_num = c.c_num
+    GROUP BY s.sss_num, s.name, s.age
+)
+SELECT 
+    student_name,
+    age,
+    total_credits,
+    DENSE_RANK() OVER (ORDER BY total_credits DESC) AS credit_rank
+FROM StudentCredits;
+
+
+-- Query B: CTE & Operational Capacity Utilization Audit
+WITH SectionEnrollment AS (
+    SELECT 
+        c.c_num,
+        c.c_desc,
+        sec.sec_num,
+        c.size_limit,
+        COUNT(a.sss_num) AS enrolled_students
+    FROM Course c
+    JOIN Section sec ON c.c_num = sec.c_num
+    LEFT JOIN Attends a ON sec.c_num = a.c_num AND sec.sec_num = a.sec_num
+    GROUP BY c.c_num, c.c_desc, sec.sec_num, c.size_limit
+)
+SELECT 
+    c_num,
+    c_desc,
+    sec_num,
+    enrolled_students,
+    size_limit,
+    ROUND((enrolled_students * 100.0 / NULLIF(size_limit, 0)), 2) AS utilization_pct,
+    CASE 
+        WHEN enrolled_students >= size_limit THEN 'At/Over Capacity'
+        WHEN enrolled_students >= (size_limit * 0.8) THEN 'Near Capacity'
+        ELSE 'Under Enrolled'
+    END AS operational_status
+FROM SectionEnrollment
+ORDER BY utilization_pct DESC;
+
+
+-- Query C: Conditional Aggregations - Faculty Demographics & Salary Pivot
+SELECT 
+    CASE 
+        WHEN age < 35 THEN 'Junior Faculty (<35)'
+        WHEN age BETWEEN 35 AND 50 THEN 'Mid-Career Faculty (35-50)'
+        ELSE 'Senior Faculty (>50)'
+    END AS age_cohort,
+    COUNT(*) AS total_faculty,
+    ROUND(AVG(salary), 2) AS avg_salary,
+    COUNT(CASE WHEN salary > 50000 THEN 1 END) AS high_earner_count
+FROM Faculty
+GROUP BY 
+    CASE 
+        WHEN age < 35 THEN 'Junior Faculty (<35)'
+        WHEN age BETWEEN 35 AND 50 THEN 'Mid-Career Faculty (35-50)'
+        ELSE 'Senior Faculty (>50)'
+    END;
+
+
+-- Query D: Student/Faculty Interaction Audit (Students with >1 Class under Same Instructor)
+SELECT 
+    s.name AS student_name,
+    f.name AS faculty_name,
+    COUNT(*) AS total_courses_together
+FROM Student s
+JOIN Attends a ON s.sss_num = a.sss_num
+JOIN Section sec ON a.c_num = sec.c_num AND a.sec_num = sec.sec_num
+JOIN Faculty f ON sec.fss_num = f.fss_num
+GROUP BY s.sss_num, s.name, f.fss_num, f.name
+HAVING COUNT(*) > 1;
+
+
+-- Query E: Full-Time Student Credit Threshold Identification
+SELECT 
+    s.sss_num,
+    s.name AS student_name,
+    SUM(c.credits) AS total_credits
+FROM Student s
+JOIN Attends a ON s.sss_num = a.sss_num
+JOIN Course c ON a.c_num = c.c_num
+GROUP BY s.sss_num, s.name
+HAVING SUM(c.credits) >= 9;
