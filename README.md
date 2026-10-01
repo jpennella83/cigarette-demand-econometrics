@@ -20,7 +20,6 @@ Executed an iterative econometric analysis in R evaluating state-level cigarette
 * **Log-Log Elasticity Model:** Transformed features into log scale to measure percentage-based demand sensitivity directly from regression coefficients[cite: 1].
 
 ## 📁 Repository Structure
-```text
 ├── src/
 │   └── econometrics_analysis.R   # Complete R regression pipeline
 ├── reports/
